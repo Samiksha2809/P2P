@@ -10,9 +10,9 @@
 void loadTrackerInfo(const std::string &filename, int tracker_no, std::string &ip, int &port) {
     std::ifstream file(filename);
     std::string line;
-    
-    // Read the tracker info from the file and select the correct tracker based on tracker_no
     int current_tracker = 0;
+
+    // Read the tracker info from the file and select the correct tracker based on tracker_no
     while (std::getline(file, line)) {
         if (current_tracker == tracker_no) {
             ip = line.substr(0, line.find(':'));
@@ -21,17 +21,21 @@ void loadTrackerInfo(const std::string &filename, int tracker_no, std::string &i
         }
         current_tracker++;
     }
-    std::cerr << "Tracker " << tracker_no << " not found in tracker_info.txt" << std::endl;
+
+    // If the tracker_no is not found, print an error and exit
+    std::cerr << "Tracker " << tracker_no << " not found in " << filename << std::endl;
     exit(EXIT_FAILURE);
 }
 
-// Function to send commands to the tracker and receive the responses
+// Function to send commands to the tracker and receive responses
 void go_to_tracker(int client_socket) {
     std::string command;
+
     while (true) {
         std::cout << "Enter command: ";
         std::getline(std::cin, command);
 
+        // If the user enters the "quit" command, break the loop
         if (command == "quit") {
             send(client_socket, command.c_str(), command.size(), 0);
             std::cout << "Client shutting down..." << std::endl;
@@ -57,7 +61,7 @@ int main(int argc, char *argv[]) {
     std::string client_ip_port = argv[1];
     std::string tracker_info = argv[2];
 
-    // Extract client IP and PORT using string manipulation and error handling
+    // Extract client IP and PORT using string manipulation
     std::string client_ip;
     int client_port = 0;
 
@@ -78,8 +82,8 @@ int main(int argc, char *argv[]) {
     // Retrieve tracker's IP and PORT from tracker_info.txt based on tracker_no
     std::string tracker_ip;
     int tracker_port;
-    int tracker_no = 0;  // This could be passed as an argument or set as needed (e.g., argv[3])
-    
+    int tracker_no = 0;  // You can modify this to connect to different trackers by changing the tracker_no
+
     loadTrackerInfo(tracker_info, tracker_no, tracker_ip, tracker_port);
 
     std::cout << "Client attempting to connect to tracker at " << tracker_ip << ":" << tracker_port << std::endl;
@@ -118,3 +122,10 @@ int main(int argc, char *argv[]) {
     close(client_socket);
     return 0;
 }
+
+
+
+
+
+
+
