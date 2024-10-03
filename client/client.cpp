@@ -6,22 +6,32 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#define PORT 8000  // Same port as tracker
-
-void loadTrackerInfo(const std::string &filename) {
+// Function to load tracker info from the file
+void loadTrackerInfo(const std::string &filename, int tracker_no, std::string &ip, int &port) {
     std::ifstream file(filename);
     std::string line;
+    
+    // Read the tracker info from the file and select the correct tracker based on tracker_no
+    int current_tracker = 0;
     while (std::getline(file, line)) {
-        std::cout << "Tracker info: " << line << std::endl;
+        if (current_tracker == tracker_no) {
+            ip = line.substr(0, line.find(':'));
+            port = std::stoi(line.substr(line.find(':') + 1));
+            return;
+        }
+        current_tracker++;
     }
+    std::cerr << "Tracker " << tracker_no << " not found in tracker_info.txt" << std::endl;
+    exit(EXIT_FAILURE);
 }
 
+// Function to send commands to the tracker and receive the responses
 void go_to_tracker(int client_socket) {
     std::string command;
     while (true) {
         std::cout << "Enter command: ";
         std::getline(std::cin, command);
-        
+
         if (command == "quit") {
             send(client_socket, command.c_str(), command.size(), 0);
             std::cout << "Client shutting down..." << std::endl;
@@ -38,64 +48,45 @@ void go_to_tracker(int client_socket) {
     }
 }
 
-void create_user(int client_socket, const std::string &user_id, const std::string &passwd) {
-    std::string command = "create_user " + user_id + " " + passwd;
-    send(client_socket, command.c_str(), command.size(), 0);
-}
-
-void login(int client_socket, const std::string &user_id, const std::string &passwd) {
-    std::string command = "login " + user_id + " " + passwd;
-    send(client_socket, command.c_str(), command.size(), 0);
-}
-
-void create_group(int client_socket, const std::string &group_id) {
-    std::string command = "create_group " + group_id;
-    send(client_socket, command.c_str(), command.size(), 0);
-}
-
-void join_group(int client_socket, const std::string &group_id) {
-    std::string command = "join_group " + group_id;
-    send(client_socket, command.c_str(), command.size(), 0);
-}
-
-void leave_group(int client_socket, const std::string &group_id) {
-    std::string command = "leave_group " + group_id;
-    send(client_socket, command.c_str(), command.size(), 0);
-}
-
-void list_requests(int client_socket, const std::string &group_id) {
-    std::string command = "list_requests " + group_id;
-    send(client_socket, command.c_str(), command.size(), 0);
-}
-
-void accept_request(int client_socket, const std::string &group_id, const std::string &user_id) {
-    std::string command = "accept_request " + group_id + " " + user_id;
-    send(client_socket, command.c_str(), command.size(), 0);
-}
-
-void list_groups(int client_socket) {
-    std::string command = "list_groups";
-    send(client_socket, command.c_str(), command.size(), 0);
-}
-
 int main(int argc, char *argv[]) {
     if (argc != 3) {
         std::cerr << "Usage: ./client <IP>:<PORT> tracker_info.txt" << std::endl;
         return 1;
     }
 
-    std::string server_ip_port = argv[1];
+    std::string client_ip_port = argv[1];
     std::string tracker_info = argv[2];
 
-    loadTrackerInfo(tracker_info);
-    
-    // Extract IP and PORT from server_ip_port
-    std::string ip = server_ip_port.substr(0, server_ip_port.find(':'));
-    int port = std::stoi(server_ip_port.substr(server_ip_port.find(':') + 1));
+    // Extract client IP and PORT using string manipulation and error handling
+    std::string client_ip;
+    int client_port = 0;
 
-    // Create socket connection to tracker
+    size_t colon_pos = client_ip_port.find(':');
+    if (colon_pos == std::string::npos) {
+        std::cerr << "Invalid client IP and port format. Use <IP>:<PORT>" << std::endl;
+        return 1;
+    }
+
+    client_ip = client_ip_port.substr(0, colon_pos);
+    try {
+        client_port = std::stoi(client_ip_port.substr(colon_pos + 1));
+    } catch (const std::invalid_argument &e) {
+        std::cerr << "Invalid port format. Port must be an integer." << std::endl;
+        return 1;
+    }
+
+    // Retrieve tracker's IP and PORT from tracker_info.txt based on tracker_no
+    std::string tracker_ip;
+    int tracker_port;
+    int tracker_no = 0;  // This could be passed as an argument or set as needed (e.g., argv[3])
+    
+    loadTrackerInfo(tracker_info, tracker_no, tracker_ip, tracker_port);
+
+    std::cout << "Client attempting to connect to tracker at " << tracker_ip << ":" << tracker_port << std::endl;
+
+    // Create socket for the client
     int client_socket;
-    struct sockaddr_in serv_addr;
+    struct sockaddr_in tracker_addr;
 
     client_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (client_socket < 0) {
@@ -103,20 +94,23 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
+    tracker_addr.sin_family = AF_INET;
+    tracker_addr.sin_port = htons(tracker_port);
 
-    if (inet_pton(AF_INET, ip.c_str(), &serv_addr.sin_addr) <= 0) {
-        std::cerr << "Invalid address/Address not supported" << std::endl;
+    if (inet_pton(AF_INET, tracker_ip.c_str(), &tracker_addr.sin_addr) <= 0) {
+        std::cerr << "Invalid tracker address" << std::endl;
         return -1;
     }
 
-    if (connect(client_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        std::cerr << "Connection failed" << std::endl;
+    std::cout << "Connecting to tracker at " << tracker_ip << ":" << tracker_port << std::endl;
+
+    // Connect to the tracker
+    if (connect(client_socket, (struct sockaddr *)&tracker_addr, sizeof(tracker_addr)) < 0) {
+        std::cerr << "Connection to tracker failed" << std::endl;
         return -1;
     }
 
-    std::cout << "Connected to tracker at " << ip << ":" << port << std::endl;
+    std::cout << "Connected to tracker at " << tracker_ip << ":" << tracker_port << std::endl;
 
     // Function to handle commands and communication with tracker
     go_to_tracker(client_socket);
